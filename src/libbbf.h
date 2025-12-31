@@ -23,8 +23,8 @@ struct BBFAssetEntry
     uint64_t offset; // Offset of the page
     uint64_t length; // length of the file
     uint64_t xxh3Hash; // Hash of image
-    uint8_t type; // 0x01 - AVIF, 0x02 PNG
-    uint8_t reserved[7]; // padding
+    uint8_t type; // 0x01 - AVIF, 0x02 PNG, 0x03 JPG ... etc.
+    uint8_t reserved[7]; // padding. Could use this in the future.
 };
 
 // Create reading order

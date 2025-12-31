@@ -1,108 +1,126 @@
-# libbbf: Bound Book Format
+# libbbf-python: Bound Book Format (BBF) Tools & Python Bindings
 
-![alt text](https://img.shields.io/badge/Format-BBF1-blue.svg)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/libbbf.svg)](https://pypi.org/project/libbbf/)
+[![PyPI](https://img.shields.io/pypi/v/libbbf.svg)](https://pypi.org/project/libbbf/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Project Overview
 
-![alt text](https://img.shields.io/badge/License-MIT-green.svg)
+`libbbf-python` provides Python bindings and command-line tools for the Bound Book Format (BBF). The Bound Book Format is an archive format designed for digital books and comics. This package allows Python developers to programmatically create and read `.bbf` files, and provides convenient command-line utilities to convert between common archive formats (like CBZ/CBX) and BBF.
 
-Bound Book Format (.bbf) is a high-performance, archival-grade binary container designed specifically for digital comic books and manga. Unlike CBR/CBZ, BBF is built for DirectSotrage/mmap, easy integrity checks, and mixed-codec containerization.
-
-## Technical Details
-BBF is designed as a Footer-indexed binary format. This allows for rapid append-only creation and immediate random access to any page without scanning the entire file.
-
-### Binary Layout
-1. **Header (13 bytes)**: Magic `BBF1`, versioning, and initial padding.
-2. **Page Data**: The raw image payloads (AVIF, PNG, etc.), each padded to **4096-byte boundaries**.
-3. **String Pool**: A deduplicated pool of null-terminated strings for metadata and section titles.
-4. **Asset Table**: A registry of physical data blobs with XXH3 hashes.
-5. **Page Table**: The logical reading order, mapping logical pages to assets.
-6. **Section Table**: Markers for chapters, volumes, or gallery sections.
-7. **Metadata Table**: Key-Value pairs for archival data (Author, Scanlation team, etc.).
-8. **Footer (76 bytes)**: Table offsets and a final integrity hash.
-
-### 4KB Alignment & DirectStorage
-Every asset in a BBF file starts on a 4KB boundary. This alignment is critical for modern NVMe-based systems. It allows developers to utilize `mmap` or **DirectStorage** to transfer image data directly from disk to GPU memory, bypassing the CPU-bottlenecked "copy and decompress" cycles found in Zip-based formats.
-
----
+The core of `libbbf-python` is a `pybind11` wrapper around the high-performance C++ `libbbf` library, ensuring speed and native integration.
 
 ## Features
 
-### Content Deduplication
-BBF uses **[XXH3_64](https://github.com/Cyan4973/xxHash)** hashing to identify identical pages. If a book contains duplicate pages, the data is stored exactly once on disk while being referenced multiple times in the Page Table.
+*   **`libbbf` Python Bindings**: Access the full `BBFBuilder` (for creating BBF files) and `BBFReader` (for reading and extracting BBF files) functionality directly in Python.
+*   **`cbx2bbf` Command-Line Tool**: Convert one or more CBZ/CBX archives (or directories of images) into a single `.bbf` file. Supports advanced features like custom page ordering, section markers (chapters, volumes), and metadata.
+*   **`bbf2cbx` Command-Line Tool**: Extract the contents of a `.bbf` file back into a `.cbz` archive or an image directory. Supports integrity verification, section-specific extraction, and range extraction using keywords.
+*   **High Performance**: Leverages C++ for core operations (file I/O, hashing, memory mapping) for optimal speed.
+*   **Integrity Checks**: Built-in XXH3 hashing for robust data verification during creation and extraction.
 
-### Archival Integrity
-Traditional bit-rot is the enemy of the archivist. BBF stores a 64-bit hash for *every individual asset*. The `bbfmux --verify` command can pinpoint exactly which page in a 2GB file has been damaged, rather than simply failing to open the entire archive.
+## Installation
 
-### Mixed-Codec Support
-Preserve covers in **Lossless PNG** while encoding internal story pages in **AVIF** to save 70% space. BBF explicitly flags the codec for every asset, allowing readers to initialize the correct decoder instantly without "guessing" the file type.
-
----
-
-## CLI Usage: `bbfmux`
-
-The included `bbfmux` tool is a reference implementation for creating and managing BBF files.
-
-## CLI Features
-
-The `bbfmux` utility provides a powerful interface for managing Bound Book files:
-
-*   **Flexible Ingestion**: Create books by passing individual files, entire directories, or a mix of both.
-*   **Logical Structuring**: Add named **Sections** (Chapters, Volumes, Galleries) to define the internal hierarchy of the book.
-*   **Custom Metadata**: Embed arbitrary Key:Value pairs into the global string pool for archival indexing.
-*   **Content-Aware Extraction**: Extract the entire book or target specific sections by name.
-
-## Usage Examples
-
-### Create a new BBF
-You can mix individual images and folders. `bbfmux` will sort inputs alphabetically, deduplicate identical assets, and align data to 4KB boundaries. 
-
-NOTE: It's not quite implemented yet in the CLI, but the `AssetTable` enables you to specify custom reading orders.
+You can install `libbbf-python` directly from PyPI:
 
 ```bash
-bbfmux cover.png ./chapter1/ endcard.png \
-  --section="Cover":1 \
-  --section="Chapter 1":2 \
-  --section="Credits":24 \
-  --meta=Title:"Akira" \
-  --meta=Author:"Katsuhiro Otomo" \
-  akira.bbf
+pip install libbbf
 ```
 
-### Verify Integrity
-Scan for bit-rot or data corruption. Will tell you which assets are corrupted.
-```bash
-bbfmux input.bbf --verify
+**Note on C++ Compiler:**
+For platforms where pre-built binary wheels are not available (e.g., specific Linux distributions or older Python versions), `pip` will attempt to build the package from source. This requires a C++ compiler (like GCC/Clang on Linux/macOS or MSVC on Windows) to be installed on your system.
+
+## Command-Line Tools Usage
+
+Once installed, two command-line tools will be available globally: `cbx2bbf` and `bbf2cbx`.
+
+### `cbx2bbf`: Create BBF Files from CBZ/Images
+
+**Usage:**
+```cbx2bbf <inputs...> [options] --output <output.bbf>
 ```
 
-### Extract Data
-Extract a specific section or the entire book.
-```bash
-bbfmux input.bbf --extract --section="Chapter 1" --outdir="./chapter1"
+**Inputs:**
+Can be individual image files (`.png`, `.avif`, `.jpg`), directories containing images, or `.cbz`/`.cbx` archives.
+
+**Options:**
+*   `--output <output.bbf>`, `-o <output.bbf>`: **Required.** Specifies the output BBF filename.
+*   `--order <path.txt>`: Use a text file to define page order. Format: `filename:index` (e.g., `cover.png:1`, `credits.png:-1` for last page).
+*   `--sections <path.txt>`: Use a text file to define multiple sections. Format: `Name:Target[:Parent]`.
+*   `--section "Name:Target[:Parent]"`: Add a single section marker. Target can be a 1-based page index or a filename. Example: `--section "Chapter 1:001.png"` or `--section "Volume 1:my_comic.cbx:Series"`.
+*   `--meta "Key:Value"`: Add archival metadata (e.g., `--meta "Title:Akira"`).
+
+**Examples:**
+
+1.  **Basic Conversion:**
+    ```bash
+    cbx2bbf my_comic.cbz -o output.bbf
+    ```
+
+2.  **Converting Multiple CBZs with Sections and Metadata:**
+    ```bash
+    cbx2bbf vol1.cbz vol2.cbz \
+        --section "Volume 1:vol1.cbz" \
+        --section "Volume 2:vol2.cbz" \
+        --meta "Title:My Awesome Series" \
+        --meta "Author:Me" \
+        -o series.bbf
+    ```
+    *(Note: `vol1.cbz` and `vol2.cbz` as targets will automatically map to the first page of those archives after sorting)*
+
+3.  **Converting a Directory of Images with a Custom Order File:**
+    ```bash
+    # pages.txt content:
+    # cover.png:1
+    # page001.png:2
+    # ...
+    # credits.png:-1
+
+    cbx2bbf ./my_pages_folder/ --order pages.txt -o my_book.bbf
+    ```
+
+### `bbf2cbx`: Extract BBF Files
+
+**Usage:**
+```
+bbf2cbx <input.bbf> [options] --output <output.cbz_or_dir>
 ```
 
-Extract the entire book
-```bash
-bbfmux input.bbf --extract --outdir="./unpacked_book"
-```
+**Options:**
+*   `--output <output_path>`, `-o <output_path>`: **Required.** Output `.cbz` file or directory name.
+*   `--dir`: Extract to a directory instead of a `.cbz` archive.
+*   `--section "Name"`: Extract only a specific section defined in the BBF.
+*   `--rangekey "String"`: When extracting a section, find the end of extraction by matching this string against the *next* section's title. Useful for extracting "Vol 1" until "Vol 2" begins.
+*   `--verify`: Perform a full XXH3 integrity check on all assets and the directory hash before extraction.
+*   `--info`: Display book structure and metadata without extracting.
 
-### View Metadata
-View the metadata for the .bbf file.
-```bash
-bbfmux input.bbf --info
-```
+**Examples:**
 
----
+1.  **Extract entire BBF to CBZ with Verification:**
+    ```bash
+    bbf2cbx my_book.bbf -o my_book_extracted.cbz --verify
+    ```
 
-## Getting Started
+2.  **Extract a specific section to a folder:**
+    ```bash
+    bbf2cbx series.bbf --section "Volume 1" --dir -o ./output/vol1/
+    ```
 
-### Prerequisites
-- C++17 compliant compiler (GCC/Clang/MSVC)
-- [xxHash](https://github.com/Cyan4973/xxHash) library
+3.  **Extract a range using `rangekey`:**
+    ```bash
+    bbf2cbx series.bbf --section "Volume 1" --rangekey "Volume 2" -o vol1_only.cbz
+    ```
 
-### Compilation
-```bash
-g++ -std=c++17 bbfmux.cpp libbbf.cpp xxhash.c -o bbfmux
-```
+4.  **Display BBF Information:**
+    ```bash
+    bbf2cbx series.bbf --info
+    ```
+
+## Contributing
+
+Contributions, issues, and feature requests are welcome! For libbbf, free to check the [issues page](https://github.com/ef1500/libbbf/issues) (or create one if it doesn't exist yet).
 
 ## License
-Distributed under the MIT License. See `LICENSE` for more information.
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---

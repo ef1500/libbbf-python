@@ -6,27 +6,36 @@
 
 BBFBuilder::BBFBuilder(const std::string& outputFilename) : currentOffset(0)
 {
+    // Open the file for writing
     fileStream.open(outputFilename, std::ios::binary | std::ios::out );
-    if ( !fileStream.is_open())
+
+    // If we can't open it...
+    if ( !fileStream.is_open() )
     {
+        // Throw a fit!
         throw std::runtime_error("Cannot open output file!");
     }
 
+    // Otherwise, write the magic number to the beginning of the file
     BBFHeader header;
     header.magic[0] = 'B';
     header.magic[1] = 'B';
     header.magic[2] = 'F';
     header.magic[3] = '1';
     header.version = 1;
-    header.reserved = 0;
+    header.reserved = 0; // Reserved for future expansions
 
+    // Write the header
     fileStream.write(reinterpret_cast<char*>(&header), sizeof(BBFHeader));
 
+    // Set the current offset to the current location in the file
     currentOffset = sizeof(BBFHeader);
 }
 
+// Destructor
 BBFBuilder::~BBFBuilder()
 {
+    // Just close the file.
     if (fileStream.is_open())
     {
         fileStream.close();
@@ -35,15 +44,19 @@ BBFBuilder::~BBFBuilder()
 
 bool BBFBuilder::alignPadding()
 {
+    // Pad the files such that they're on 4kb boundaries.
     uint64_t padding = (4096 - (currentOffset % 4096)) % 4096;
 
+    // If the padding is greater than zero...
     if (padding > 0)
     {
+        // write padding
         std::vector<char> zeroes(padding, 0);
         fileStream.write(zeroes.data(), padding);
         currentOffset += padding;
         return true;
     }
+    // otherwise don't.
     else {return false; }
 }
 
@@ -54,29 +67,30 @@ uint64_t BBFBuilder::calculateXXH3Hash(const std::vector<char> &buffer)
 
 bool BBFBuilder::addPage(const std::string& imagePath, uint8_t type, uint32_t flags)
 {
+    // open file up for reading
     std::ifstream input(imagePath, std::ios::binary | std::ios::ate);
-    if ( !input ) return false;
+    if ( !input ) return false; // return false if we can't open it
     
-    std::streamsize size = input.tellg();
-    input.seekg(0, std::ios::beg);
+    std::streamsize size = input.tellg(); // figure out how big the stream is
+    input.seekg(0, std::ios::beg); // seek to the beginning of the file
 
-    std::vector<char> buffer(size);
-    if (!input.read(buffer.data(), size)) return false;
+    std::vector<char> buffer(size); // create a buffer for the file
+    if (!input.read(buffer.data(), size)) return false; // read the data into the buffer
 
-    uint64_t hash = calculateXXH3Hash(buffer);
-    uint32_t assetIndex = 0;
+    uint64_t hash = calculateXXH3Hash(buffer); // calculate hash
+    uint32_t assetIndex = 0; // set the asset index (will set momentarily)
 
     // dedupe
-    auto it = dedupeMap.find(hash);
+    auto it = dedupeMap.find(hash); // try to see if the file already exists
     if (it != dedupeMap.end())
-
     {
-        // dupe found.
+        // dupe found. set asset index to the index of the pre-existing asset
         assetIndex = it->second;
     }
     else
     {
-        alignPadding();
+        // No dupe found. create a new asset.
+        alignPadding(); // start by allocating necessary padding.
 
         BBFAssetEntry newAsset;
         newAsset.offset = currentOffset;
@@ -86,13 +100,13 @@ bool BBFBuilder::addPage(const std::string& imagePath, uint8_t type, uint32_t fl
 
         for ( int i = 0; i < 7; i++ )
         {
-            newAsset.reserved[i] = 0;
+            newAsset.reserved[i] = 0; // Add in the reserved bytes.
         }
 
         fileStream.write(buffer.data(), size);
         currentOffset += size;
 
-        assetIndex = static_cast<uint32_t>(assets.size());
+        assetIndex = static_cast<uint32_t>(assets.size()); // (may change later on to just be numeric)
         assets.push_back(newAsset);
         dedupeMap[hash] = assetIndex;
     }
@@ -108,6 +122,7 @@ bool BBFBuilder::addPage(const std::string& imagePath, uint8_t type, uint32_t fl
 
 uint32_t BBFBuilder::getOrAddStr(const std::string& str)
 {
+    // Create the string table. Do same thing as add page but slightly different.
     auto it = stringMap.find(str);
     if (it != stringMap.end())
     {
@@ -147,43 +162,64 @@ bool BBFBuilder::finalize()
 {
     uint64_t indexStart = currentOffset;
 
+    // Initialize XXH3 State
+    XXH3_state_t* const state = XXH3_createState();
+    if (state == nullptr) return false;
+    XXH3_64bits_reset(state);
+
+    // Helper lambda to write to file and update hash simultaneously
+    auto writeAndHash = [&](const void* data, size_t size) {
+        if (size == 0) return;
+        fileStream.write(reinterpret_cast<const char*>(data), size);
+        XXH3_64bits_update(state, data, size);
+        currentOffset += size;
+    };
+
     //write footer
     BBFFooter footer;
     footer.stringPoolOffset = currentOffset;
-    fileStream.write(stringPool.data(), stringPool.size());
-    currentOffset += stringPool.size();
+
+    //fileStream.write(stringPool.data(), stringPool.size());
+    //currentOffset += stringPool.size();
+    // Use writeAndHash instead
+    writeAndHash(stringPool.data(), stringPool.size());
 
     // write assets
     footer.assetTableOffset = currentOffset;
     footer.assetCount = static_cast<uint32_t>(assets.size());
 
-    fileStream.write(reinterpret_cast<char*>(assets.data()), assets.size() * sizeof (BBFAssetEntry));
-    currentOffset += assets.size() *sizeof(BBFAssetEntry);
+    //fileStream.write(reinterpret_cast<char*>(assets.data()), assets.size() * sizeof (BBFAssetEntry));
+    //currentOffset += assets.size() *sizeof(BBFAssetEntry);
+    writeAndHash(assets.data(), assets.size() * sizeof (BBFAssetEntry));
 
     // write page table
     footer.pageTableOffset = currentOffset;
     footer.pageCount = static_cast<uint32_t>(pages.size());
 
-    fileStream.write(reinterpret_cast<char*>(pages.data()), pages.size() * sizeof(BBFPageEntry));
-    currentOffset += pages.size() * sizeof(BBFPageEntry);
+    //fileStream.write(reinterpret_cast<char*>(pages.data()), pages.size() * sizeof(BBFPageEntry));
+    //currentOffset += pages.size() * sizeof(BBFPageEntry);
+    writeAndHash(pages.data(), pages.size() * sizeof(BBFPageEntry));
 
     // write section table
     footer.sectionTableOffset = currentOffset;
     footer.sectionCount = static_cast<uint32_t>(sections.size());
 
-    fileStream.write(reinterpret_cast<char*>(sections.data()), sections.size() * sizeof(BBFSection));
-    currentOffset += sections.size() * sizeof(BBFSection);
+    //fileStream.write(reinterpret_cast<char*>(sections.data()), sections.size() * sizeof(BBFSection));
+    //currentOffset += sections.size() * sizeof(BBFSection);
+    writeAndHash(sections.data(), sections.size() * sizeof(BBFSection));
+
 
     // write metadata
     footer.metaTableOffset = currentOffset;
     footer.keyCount = static_cast<uint32_t>(metadata.size());
 
-    fileStream.write(reinterpret_cast<char*>(metadata.data()), metadata.size() * sizeof(BBFMetadata));
-    currentOffset += metadata.size() * sizeof(BBFMetadata);
+    //fileStream.write(reinterpret_cast<char*>(metadata.data()), metadata.size() * sizeof(BBFMetadata));
+    // currentOffset += metadata.size() * sizeof(BBFMetadata);
+    writeAndHash(metadata.data(), metadata.size() * sizeof(BBFMetadata));
 
     // calculate directory hash (everything from the index beginning to the currentOffset)
-    // placeholder for now
-    footer.indexHash = 0xB00B5000;
+    footer.indexHash = XXH3_64bits_digest(state);
+    XXH3_freeState(state);
 
     // write footer
     footer.magic[0] = 'B';
