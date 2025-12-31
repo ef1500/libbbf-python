@@ -22,7 +22,7 @@ setup(
     author="EF1500",
     author_email="rosemilovelockofficial@proton.me",
     description="Bound Book Format (BBF) tools and bindings",
-    long_description=open("README.md").read(),
+    long_description=open("readme.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/ef1500/libbbf",
     
