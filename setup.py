@@ -2,13 +2,21 @@ from setuptools import setup, find_packages
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 import os
 
+# --- SAFE README READING ---
+# This block checks multiple common filenames and handles errors gracefully.
+# If no readme is found, it defaults to an empty string instead of crashing.
 long_description = ""
-possible_readmes = ["README.md"] # stupid bug.
+possible_readmes = ["README.md", "readme.md", "README.txt"]
+
 for f in possible_readmes:
     if os.path.exists(f):
-        with open(f, "r", encoding="utf-8") as file:
-            long_description = file.read()
-        break
+        try:
+            with open(f, "r", encoding="utf-8") as file:
+                long_description = file.read()
+            break
+        except:
+            pass
+# ---------------------------
 
 # Define the C++ extension
 ext_modules = [
@@ -25,7 +33,7 @@ ext_modules = [
 
 setup(
     name="libbbf",
-    version="0.2.2",
+    version="0.2.3",  # Bumped version to ensure a clean release
     author="EF1500",
     author_email="rosemilovelockofficial@proton.me",
     description="Bound Book Format (BBF) tools and bindings",
@@ -33,14 +41,10 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/ef1500/libbbf",
     
-    # This finds the 'libbbf_tools' folder
     packages=find_packages(), 
-    
-    # This compiles the C++ code
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
     
-    # This creates the command line tools 'cbx2bbf' and 'bbf2cbx'
     entry_points={
         "console_scripts": [
             "cbx2bbf=libbbf_tools.cbx2bbf:main",
