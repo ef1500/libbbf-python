@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-`libbbf-python` provides Python bindings and command-line tools for the Bound Book Format (BBF). The Bound Book Format is an archive format designed for digital books and comics. This package allows Python developers to programmatically create and read `.bbf` files, and provides convenient command-line utilities to convert between common archive formats (like CBZ/CBX) and BBF.
+`libbbf-python` provides Python bindings and command-line tools for the [Bound Book Format (BBF)](https://github.com/ef1500/libbbf). The Bound Book Format is an archive format designed for digital books and comics. This package allows Python developers to programmatically create and read `.bbf` files, and provides convenient command-line utilities to convert between common archive formats (like CBZ/CBX) and BBF.
 
 The core of `libbbf-python` is a `pybind11` wrapper around the high-performance C++ `libbbf` library, ensuring speed and native integration.
 
