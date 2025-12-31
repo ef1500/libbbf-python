@@ -33,7 +33,7 @@ ext_modules = [
 
 setup(
     name="libbbf",
-    version="0.2.4",  # Bumped version to ensure a clean release
+    version="0.2.10",
     author="EF1500",
     author_email="rosemilovelockofficial@proton.me",
     description="Bound Book Format (BBF) tools and bindings",
