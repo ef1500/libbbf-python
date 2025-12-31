@@ -116,6 +116,60 @@ bbf2cbx <input.bbf> [options] --output <output.cbz_or_dir>
     bbf2cbx series.bbf --info
     ```
 
+## Using `libbbf`
+
+You can also interface libbbf directly from python.
+
+Example 1: Creating a .bbf file
+```python
+from libbbf import BBFBuilder
+import os
+
+# Create a new Bound Book
+builder = BBFBuilder("my_comic.bbf")
+
+# Add Metadata
+builder.add_metadata("Title", "Solo Leveling")
+builder.add_metadata("Author", "Chugong")
+
+# Add Pages (Assets are automatically deduplicated by hash!)
+page_files = sorted(os.listdir("./chapter_images"))
+for i, filename in enumerate(page_files):
+    full_path = os.path.join("./chapter_images", filename)
+    
+    # Flags: 0 = Standard
+    builder.add_page(full_path, type=1, flags=0) 
+
+    # Define a Chapter every 20 pages
+    if i % 20 == 0:
+        builder.add_section(f"Chapter {i // 20 + 1}", start_page=i)
+
+# Finalize writes the footer and optimized tables
+builder.finalize()
+print("BBF created successfully.")
+```
+
+Example 2: Verifying a .bbf file
+```python
+import libbbf
+import time
+
+reader = libbbf.BBFReader("massive_archive.bbf")
+
+print("Verifying file integrity...")
+start = time.time()
+
+# This releases the GIL, so it's thread-safe and incredibly fast
+is_valid = reader.verify()
+
+end = time.time()
+
+if is_valid:
+    print(f"SUCCESS: Integrity verified in {end - start:.4f}s")
+else:
+    print("ERROR: Corruption detected!")
+```
+
 ## Contributing
 
 Contributions, issues, and feature requests are welcome! For libbbf, free to check the [issues page](https://github.com/ef1500/libbbf/issues) (or create one if it doesn't exist yet).
