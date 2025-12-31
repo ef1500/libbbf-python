@@ -8,8 +8,7 @@ ext_modules = [
         "libbbf",
         [
             "src/bindings.cpp",
-            "src/libbbf.cpp",
-            "src/xxhash.c",  # Make sure you have this file!
+            "src/libbbf.cpp"
         ],
         include_dirs=["src"],
         cxx_std=17,
