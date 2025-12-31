@@ -3,7 +3,7 @@ from pybind11.setup_helpers import Pybind11Extension, build_ext
 import os
 
 long_description = ""
-possible_readmes = "README.md"
+possible_readmes = ["README.md"] # stupid bug.
 for f in possible_readmes:
     if os.path.exists(f):
         with open(f, "r", encoding="utf-8") as file:
