@@ -2,6 +2,14 @@ from setuptools import setup, find_packages
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 import os
 
+long_description = ""
+possible_readmes = "README.md"
+for f in possible_readmes:
+    if os.path.exists(f):
+        with open(f, "r", encoding="utf-8") as file:
+            long_description = file.read()
+        break
+
 # Define the C++ extension
 ext_modules = [
     Pybind11Extension(
@@ -17,11 +25,11 @@ ext_modules = [
 
 setup(
     name="libbbf",
-    version="0.2.1",
+    version="0.2.2",
     author="EF1500",
     author_email="rosemilovelockofficial@proton.me",
     description="Bound Book Format (BBF) tools and bindings",
-    long_description=open("readme.md").read(),
+    long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ef1500/libbbf",
     
