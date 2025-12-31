@@ -36,7 +36,8 @@ Once installed, two command-line tools will be available globally: `cbx2bbf` and
 ### `cbx2bbf`: Create BBF Files from CBZ/Images
 
 **Usage:**
-```cbx2bbf <inputs...> [options] --output <output.bbf>
+```
+cbx2bbf <inputs...> [options] --output <output.bbf>
 ```
 
 **Inputs:**
