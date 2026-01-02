@@ -4,7 +4,7 @@
 #include "xxhash.h"
 
 #include <string>
-#include <string_view> // C++17: Essential for zero-copy parsing
+#include <string_view> 
 #include <vector>
 #include <map>
 #include <cstring>
@@ -78,7 +78,6 @@ struct MemoryMappedFile {
 
 class BBFReader {
 private:
-    // Cached pointers to avoid recalculating offsets repeatedly
     const char* data_ptr = nullptr;
     const BBFSection* sections_ = nullptr;
     const BBFMetadata* meta_ = nullptr;
@@ -108,8 +107,9 @@ public:
         std::memcpy(&footer, data_ptr + mmap.size - sizeof(BBFFooter), sizeof(BBFFooter));
         if (std::memcmp(footer.magic, "BBF1", 4) != 0) return;
 
-        // Cache Table Pointers
-        // Note: In production, you should add bounds checks here to ensure offsets are within mmap.size
+        // Safety: Ensure tables point inside the file
+        if (footer.assetTableOffset >= mmap.size || footer.pageTableOffset >= mmap.size) return;
+
         sections_ = reinterpret_cast<const BBFSection*>(data_ptr + footer.sectionTableOffset);
         meta_     = reinterpret_cast<const BBFMetadata*>(data_ptr + footer.metaTableOffset);
         pages_    = reinterpret_cast<const BBFPageEntry*>(data_ptr + footer.pageTableOffset);
@@ -121,12 +121,8 @@ public:
         isValid = true;
     }
 
-    // Optimized: Returns string_view (no allocation)
-    // Helper to allow returning std::string for legacy binding support if needed, 
-    // but internal logic should prefer views.
     std::string_view getStringView(uint32_t offset) const {
         if (offset >= stringPoolSize_) return {};
-        // Requires strings in file to be null-terminated.
         return std::string_view(stringPool_ + offset);
     }
 
@@ -140,9 +136,8 @@ public:
         std::vector<PySection> result;
         if (!isValid) return result;
         
-        result.reserve(footer.sectionCount); // Optimization: Reserve memory
+        result.reserve(footer.sectionCount);
         for (uint32_t i = 0; i < footer.sectionCount; i++) {
-            // Explicit conversion to std::string here is okay as we are handing off to Python
             result.push_back({
                 std::string(getStringView(sections_[i].sectionTitleOffset)), 
                 sections_[i].sectionStartIndex, 
@@ -166,21 +161,14 @@ public:
         return result;
     }
 
-    // Zero-copy accessor for PyBind
-    // Returns {pointer, size}
     std::pair<const char*, size_t> getPageRaw(uint32_t pageIndex) const {
         if (!isValid || pageIndex >= footer.pageCount) return {nullptr, 0};
         
-        // Indirect addressing: Page -> Asset -> Offset/Length
         const auto& asset = assets_[pages_[pageIndex].assetIndex];
-        return { data_ptr + asset.offset, asset.length };
-    }
+        // Bounds check on asset
+        if (asset.offset + asset.length > mmap.size) return {nullptr, 0};
 
-    // Legacy support (copies data)
-    std::string getPageBytes(uint32_t pageIndex) const {
-        auto raw = getPageRaw(pageIndex);
-        if (!raw.first) return "";
-        return std::string(raw.first, raw.second);
+        return { data_ptr + asset.offset, static_cast<size_t>(asset.length) };
     }
 
     std::map<std::string, uint64_t> getPageInfo(uint32_t pageIndex) const {
@@ -191,56 +179,62 @@ public:
             {"length", asset.length},
             {"offset", asset.offset},
             {"hash", asset.xxh3Hash},
-            {"type", asset.type}
+            {"type", asset.type},
+            {"decodedLength", asset.decodedLength} // ADDED: v1.1 Spec
         };
     }
 
-    bool verify() const {
-        if (!isValid) return false;
+    // Returns -1 for Success, -2 for Directory Error, or >=0 for Asset Index Error
+    int64_t verify() const {
+        if (!isValid) return -2;
         
         // 1. Directory Hash Check
         size_t metaStart = footer.stringPoolOffset;
         size_t metaSize = mmap.size - sizeof(BBFFooter) - metaStart;
-        if (XXH3_64bits(data_ptr + metaStart, metaSize) != footer.indexHash) return false;
+        if (XXH3_64bits(data_ptr + metaStart, metaSize) != footer.indexHash) return -2;
 
         // 2. Asset Integrity Check
         size_t count = footer.assetCount;
-        const auto* local_assets = assets_; // Copy pointer for lambda capture
+        const auto* local_assets = assets_;
         const auto* local_data = data_ptr;
+        size_t max_size = mmap.size;
 
-        auto verifyRange = [local_assets, local_data](size_t start, size_t end) -> bool {
+        // Lambda returns -1 if OK, or the index if Bad
+        auto verifyRange = [local_assets, local_data, max_size](size_t start, size_t end) -> int64_t {
             for (size_t i = start; i < end; ++i) {
                 const auto& a = local_assets[i];
+                // Bounds check before hash
+                if (a.offset + a.length > max_size) return (int64_t)i;
+                
                 if (XXH3_64bits((const uint8_t*)local_data + a.offset, a.length) != a.xxh3Hash) {
-                    return false;
+                    return (int64_t)i; // Return the corrupted index
                 }
             }
-            return true;
+            return -1; // Success
         };
 
-        // Optimization: Don't spawn threads for small files
         size_t numThreads = std::thread::hardware_concurrency();
         if (numThreads == 0) numThreads = 1;
 
-        // Heuristic: If assets < 128, threading overhead > hashing gain
         if (count < 128 || numThreads == 1) {
             return verifyRange(0, count);
         }
 
         size_t chunkSize = count / numThreads;
-        std::vector<std::future<bool>> futures;
+        std::vector<std::future<int64_t>> futures; // Changed from bool to int64_t
         futures.reserve(numThreads);
 
         for (size_t i = 0; i < numThreads; ++i) {
             size_t start = i * chunkSize;
             size_t end = (i == numThreads - 1) ? count : start + chunkSize;
-            // Launch async
             futures.push_back(std::async(std::launch::async, verifyRange, start, end));
         }
 
+        // Check results
         for (auto& f : futures) {
-            if (!f.get()) return false;
+            int64_t result = f.get();
+            if (result != -1) return result; // Bubble up the error index
         }
-        return true;
+        return -1; // All good
     }
 };

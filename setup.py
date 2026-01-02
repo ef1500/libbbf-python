@@ -24,7 +24,8 @@ ext_modules = [
         "libbbf",
         [
             "src/bindings.cpp",
-            "src/libbbf.cpp"
+            "src/libbbf.cpp",
+            "src/xxhash.c"
         ],
         include_dirs=["src"],
         cxx_std=17,
@@ -33,7 +34,7 @@ ext_modules = [
 
 setup(
     name="libbbf",
-    version="0.2.10",
+    version="0.2.12",
     author="EF1500",
     author_email="rosemilovelockofficial@proton.me",
     description="Bound Book Format (BBF) tools and bindings",

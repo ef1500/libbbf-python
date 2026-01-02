@@ -26,21 +26,20 @@ PYBIND11_MODULE(libbbf, m) {
     py::class_<BBFReader>(m, "BBFReader")
         .def(py::init<const std::string &>())
         .def_readonly("is_valid", &BBFReader::isValid)
-        .def_readonly("footer", &BBFReader::footer) // Optional: expose footer struct directly if bound
+        // We don't need to expose footer struct directly unless you wrote a binding for BBFFooter
         .def("get_page_count", [](BBFReader& r) { return r.footer.pageCount; })
         .def("get_asset_count", [](BBFReader& r) { return r.footer.assetCount; })
         
         .def("verify", &BBFReader::verify, 
-             py::call_guard<py::gil_scoped_release>(), // IMPORTANT: Release GIL during long hashing
-             "Verify integrity of index and assets. Multithreaded.")
+             py::call_guard<py::gil_scoped_release>(), 
+             "Verify integrity. Returns: -1 (Success), -2 (Directory Fail), or >=0 (Index of corrupt asset).")
 
         .def("get_sections", [](BBFReader& r) {
-            // Optimizing the conversion loop
             py::list result;
             const auto sections = r.getSections();
             for (const auto& s : sections) {
                 py::dict d;
-                d["title"] = s.title; // Moves string
+                d["title"] = s.title; 
                 d["startPage"] = s.startPage;
                 d["parent"] = s.parent;
                 result.append(d);
@@ -50,11 +49,13 @@ PYBIND11_MODULE(libbbf, m) {
         
         .def("get_metadata", &BBFReader::getMetadata,
              "Returns a list of (Key, Value) tuples.")
+             
+        .def("get_page_info", &BBFReader::getPageInfo,
+             "Returns dict with keys: length, offset, hash, type, decodedLength")
 
         .def("get_page_data", [](BBFReader& r, uint32_t idx) {
              auto raw = r.getPageRaw(idx);
              if (!raw.first) return py::bytes("");
-             // 1-Copy: Copies from mmap -> Python Bytes Object
              return py::bytes(raw.first, raw.second);
         }, "Returns the raw bytes of the page asset (1-Copy).")
 
@@ -62,14 +63,11 @@ PYBIND11_MODULE(libbbf, m) {
              auto raw = r.getPageRaw(idx);
              if (!raw.first) return py::memoryview(py::bytes("")); 
              
-             // 0-Copy: Direct view into mmap
-             // Warning: This view crashes Python if BBFReader is garbage collected before the view!
-             // To fix this lifetime issue, we use 'py::keep_alive'.
              return py::memoryview::from_memory(
                  const_cast<char*>(raw.first), 
                  raw.second,
                  true // read-only
              );
-        }, py::keep_alive<0, 1>(), // Keep BBFReader (1) alive while memoryview (0) exists
+        }, py::keep_alive<0, 1>(), 
            "Returns a zero-copy memoryview of the asset. Fastest method.");
 }
