@@ -4,6 +4,8 @@
 [![PyPI](https://img.shields.io/pypi/v/libbbf.svg)](https://pypi.org/project/libbbf/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+# Official Source Notice: Please only download releases from this repository. External mirrors or forks may contain malware.
+
 ## Project Overview
 
 `libbbf-python` provides Python bindings and command-line tools for the [Bound Book Format (BBF)](https://github.com/ef1500/libbbf). The Bound Book Format is an archive format designed for digital books and comics. This package allows Python developers to programmatically create and read `.bbf` files, and provides convenient command-line utilities to convert between common archive formats (like CBZ/CBX) and BBF.
