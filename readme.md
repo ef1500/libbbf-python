@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/libbbf.svg)](https://pypi.org/project/libbbf/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Official Source Notice: Please only download releases from this repository. External mirrors or forks may contain malware.
+# Official Source Notice: Please only download resources from this repository (ef1500/libbbf-python). External mirrors or forks may contain malware.
 
 ## Project Overview
 
