@@ -1,7 +1,6 @@
 # libbbf-python: Bound Book Format (BBF) Tools & Python Bindings
 
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/libbbf.svg)](https://pypi.org/project/libbbf/)
-[![PyPI](https://img.shields.io/pypi/v/libbbf.svg)](https://pypi.org/project/libbbf/)
+[![PyPI](https://img.shields.io/pypi/v/libbbf.svg)](https://pypi.org/v/libbbf/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > [!WARNING]
