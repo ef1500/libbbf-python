@@ -76,7 +76,8 @@ struct MemoryMappedFile {
     ~MemoryMappedFile() { unmap(); }
 };
 
-class BBFReader {
+class BBFReader 
+{
 private:
     const char* data_ptr = nullptr;
     const BBFSection* sections_ = nullptr;
@@ -92,7 +93,8 @@ public:
     MemoryMappedFile mmap;
     bool isValid = false;
 
-    BBFReader(const std::string& path) {
+    BBFReader(const std::string& path) 
+    {
         if (!mmap.map(path)) return;
         data_ptr = static_cast<const char*>(mmap.data);
 
@@ -121,24 +123,31 @@ public:
         isValid = true;
     }
 
-    std::string_view getStringView(uint32_t offset) const {
+    // Get string view
+    std::string_view getStringView(uint32_t offset) const 
+    {
         if (offset >= stringPoolSize_) return {};
         return std::string_view(stringPool_ + offset);
     }
 
-    struct PySection {
+    struct PySection 
+    {
         std::string title;
         uint32_t startPage;
         uint32_t parent;
     };
 
-    std::vector<PySection> getSections() const {
+    // Get sections
+    std::vector<PySection> getSections() const 
+    {
         std::vector<PySection> result;
         if (!isValid) return result;
         
         result.reserve(footer.sectionCount);
-        for (uint32_t i = 0; i < footer.sectionCount; i++) {
-            result.push_back({
+        for (uint32_t i = 0; i < footer.sectionCount; i++) 
+        {
+            result.push_back(
+                {
                 std::string(getStringView(sections_[i].sectionTitleOffset)), 
                 sections_[i].sectionStartIndex, 
                 sections_[i].parentSectionIndex
@@ -147,12 +156,15 @@ public:
         return result;
     }
 
-    std::vector<std::pair<std::string, std::string>> getMetadata() const {
+    // Get metadata
+    std::vector<std::pair<std::string, std::string>> getMetadata() const 
+    {
         std::vector<std::pair<std::string, std::string>> result;
         if (!isValid) return result;
 
         result.reserve(footer.keyCount);
-        for (uint32_t i = 0; i < footer.keyCount; i++) {
+        for (uint32_t i = 0; i < footer.keyCount; i++) 
+        {
             result.emplace_back(
                 getStringView(meta_[i].keyOffset), 
                 getStringView(meta_[i].valOffset)
@@ -161,7 +173,9 @@ public:
         return result;
     }
 
-    std::pair<const char*, size_t> getPageRaw(uint32_t pageIndex) const {
+    // Get page raw
+    std::pair<const char*, size_t> getPageRaw(uint32_t pageIndex) const 
+    {
         if (!isValid || pageIndex >= footer.pageCount) return {nullptr, 0};
         
         const auto& asset = assets_[pages_[pageIndex].assetIndex];
@@ -171,7 +185,36 @@ public:
         return { data_ptr + asset.offset, static_cast<size_t>(asset.length) };
     }
 
-    std::map<std::string, uint64_t> getPageInfo(uint32_t pageIndex) const {
+    // Get footer info
+    std::map<std::string, uint64_t> getFooterInfo() const
+    {
+        // If invalid, return empty set.
+        if (!isValid) return {};
+
+        // Otherwise return all this juicy information!
+        return 
+        {
+            {"stringPoolOffset", footer.stringPoolOffset},
+            {"assetTableOffset", footer.assetTableOffset},
+            {"assetCount", static_cast<uint64_t>(footer.assetCount)},
+
+            {"pageTableOffset", footer.pageTableOffset},
+            {"pageCount", static_cast<uint64_t>(footer.pageCount)},
+
+            {"sectionTableOffset", footer.sectionTableOffset},
+            {"sectionCount", footer.sectionCount},
+
+            {"metaTableOffset", footer.metaTableOffset},
+            {"keyCount", static_cast<uint64_t>(footer.keyCount)},
+
+            {"extraOffset", footer.extraOffset},
+            {"indexHash", footer.indexHash}
+        };
+    }
+
+    // Get page info
+    std::map<std::string, uint64_t> getPageInfo(uint32_t pageIndex) const 
+    {
         if (!isValid || pageIndex >= footer.pageCount) return {};
 
         const auto& asset = assets_[pages_[pageIndex].assetIndex];
@@ -180,12 +223,29 @@ public:
             {"offset", asset.offset},
             {"hash", asset.xxh3Hash},
             {"type", asset.type},
+            {"flags", asset.flags}, // Add flags
             {"decodedLength", asset.decodedLength} // ADDED: v1.1 Spec
         };
     }
 
+    // verify a specific page
+    std::map<uint64_t, bool> verifyPage(uint32_t pageIndex)
+    {
+        if (!isValid || pageIndex >= footer.pageCount) return {};
+        // Get page
+        const auto& asset = assets_[pages_[pageIndex].assetIndex];
+        // Check mmap length
+        if (asset.offset + asset.length > mmap.size) return {};
+        // hash
+        uint64_t xxhHash = XXH3_64bits((const uint8_t*)data_ptr + asset.offset, asset.length);
+
+        bool match = (xxhHash == asset.xxh3Hash);
+        return {{xxhHash, match}};
+    }
+
     // Returns -1 for Success, -2 for Directory Error, or >=0 for Asset Index Error
-    int64_t verify() const {
+    int64_t verify() const 
+    {
         if (!isValid) return -2;
         
         // 1. Directory Hash Check
@@ -200,13 +260,16 @@ public:
         size_t max_size = mmap.size;
 
         // Lambda returns -1 if OK, or the index if Bad
-        auto verifyRange = [local_assets, local_data, max_size](size_t start, size_t end) -> int64_t {
-            for (size_t i = start; i < end; ++i) {
+        auto verifyRange = [local_assets, local_data, max_size](size_t start, size_t end) -> int64_t 
+        {
+            for (size_t i = start; i < end; ++i) 
+            {
                 const auto& a = local_assets[i];
                 // Bounds check before hash
                 if (a.offset + a.length > max_size) return (int64_t)i;
                 
-                if (XXH3_64bits((const uint8_t*)local_data + a.offset, a.length) != a.xxh3Hash) {
+                if (XXH3_64bits((const uint8_t*)local_data + a.offset, a.length) != a.xxh3Hash) 
+                {
                     return (int64_t)i; // Return the corrupted index
                 }
             }
@@ -216,7 +279,8 @@ public:
         size_t numThreads = std::thread::hardware_concurrency();
         if (numThreads == 0) numThreads = 1;
 
-        if (count < 128 || numThreads == 1) {
+        if (count < 128 || numThreads == 1) 
+        {
             return verifyRange(0, count);
         }
 
@@ -224,14 +288,16 @@ public:
         std::vector<std::future<int64_t>> futures; // Changed from bool to int64_t
         futures.reserve(numThreads);
 
-        for (size_t i = 0; i < numThreads; ++i) {
+        for (size_t i = 0; i < numThreads; ++i) 
+        {
             size_t start = i * chunkSize;
             size_t end = (i == numThreads - 1) ? count : start + chunkSize;
             futures.push_back(std::async(std::launch::async, verifyRange, start, end));
         }
 
         // Check results
-        for (auto& f : futures) {
+        for (auto& f : futures) 
+        {
             int64_t result = f.get();
             if (result != -1) return result; // Bubble up the error index
         }

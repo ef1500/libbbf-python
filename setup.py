@@ -21,7 +21,7 @@ for f in possible_readmes:
 # Define the C++ extension
 ext_modules = [
     Pybind11Extension(
-        "libbbf",
+        "libbbf._bbf",
         [
             "src/bindings.cpp",
             "src/libbbf.cpp",
@@ -34,7 +34,7 @@ ext_modules = [
 
 setup(
     name="libbbf",
-    version="0.2.13",
+    version="0.3.0",
     author="EF1500",
     author_email="rosemilovelockofficial@proton.me",
     description="Bound Book Format (BBF) tools and bindings",
@@ -48,8 +48,8 @@ setup(
     
     entry_points={
         "console_scripts": [
-            "cbx2bbf=libbbf_tools.cbx2bbf:main",
-            "bbf2cbx=libbbf_tools.bbf2cbx:main",
+            "cbx2bbf=libbbf.cbx2bbf:main",
+            "bbf2cbx=libbbf.bbf2cbx:main",
         ],
     },
     

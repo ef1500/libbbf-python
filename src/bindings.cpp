@@ -5,7 +5,7 @@
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(libbbf, m) {
+PYBIND11_MODULE(_bbf, m) {
     m.doc() = "Bound Book Format (BBF) Python Bindings";
 
     // --- BBFBuilder (Writer) ---
@@ -26,15 +26,24 @@ PYBIND11_MODULE(libbbf, m) {
     py::class_<BBFReader>(m, "BBFReader")
         .def(py::init<const std::string &>())
         .def_readonly("is_valid", &BBFReader::isValid)
-        // We don't need to expose footer struct directly unless you wrote a binding for BBFFooter
+        .def("close", [](BBFReader& r) 
+        { 
+          r.mmap.unmap(); 
+          r.isValid = false; // Prevent further reads
+        }, "Unmaps the file immediately.")
+
         .def("get_page_count", [](BBFReader& r) { return r.footer.pageCount; })
         .def("get_asset_count", [](BBFReader& r) { return r.footer.assetCount; })
         
         .def("verify", &BBFReader::verify, 
              py::call_guard<py::gil_scoped_release>(), 
              "Verify integrity. Returns: -1 (Success), -2 (Directory Fail), or >=0 (Index of corrupt asset).")
+     
+        .def("verify_page", &BBFReader::verifyPage,
+             "Verify a single page, returns a dict <uint64_t, bool>, {calculated hash, match?}.")
 
-        .def("get_sections", [](BBFReader& r) {
+        .def("get_sections", [](BBFReader& r) 
+        {
             py::list result;
             const auto sections = r.getSections();
             for (const auto& s : sections) {
@@ -47,19 +56,24 @@ PYBIND11_MODULE(libbbf, m) {
             return result;
         }, "Returns sections as [{'title': str, 'startPage': int, 'parent': int}]")
         
+        .def("get_footer", &BBFReader::getFooterInfo, 
+             "Returns a dict representing the footer.")
+
         .def("get_metadata", &BBFReader::getMetadata,
              "Returns a list of (Key, Value) tuples.")
              
         .def("get_page_info", &BBFReader::getPageInfo,
              "Returns dict with keys: length, offset, hash, type, decodedLength")
 
-        .def("get_page_data", [](BBFReader& r, uint32_t idx) {
+        .def("get_page_data", [](BBFReader& r, uint32_t idx) 
+        {
              auto raw = r.getPageRaw(idx);
              if (!raw.first) return py::bytes("");
              return py::bytes(raw.first, raw.second);
         }, "Returns the raw bytes of the page asset (1-Copy).")
 
-        .def("get_page_view", [](BBFReader& r, uint32_t idx) {
+        .def("get_page_view", [](BBFReader& r, uint32_t idx) 
+        {
              auto raw = r.getPageRaw(idx);
              if (!raw.first) return py::memoryview(py::bytes("")); 
              
